@@ -34,6 +34,7 @@ IMPORTANT: Only modify MediaProcessor/src/AudioProcessor.cpp. Do not modify
 any cmake files or test files.
 """)
 
+
     _ = yield prompt
 
     grade = Grade.from_subscores([
