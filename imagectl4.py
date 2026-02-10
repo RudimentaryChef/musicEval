@@ -30,6 +30,7 @@ from pathlib import Path
 import hud
 from hud import Environment
 from hud.agents.claude import ClaudeAgent
+from hud.agents.openai import OpenAIAgent
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -222,19 +223,28 @@ async def validate_all(
 # ============================================================================
 
 
+def _create_agent(model: str):
+    """Create an agent for the given model string."""
+    if model.startswith("gpt") or model.startswith("o1") or model.startswith("o3") or model.startswith("o4"):
+        return OpenAIAgent.create(model=model)
+    else:
+        return ClaudeAgent.create(model=model)
+
+
 async def run_scenario(
     image: str,
     scenario_id: str,
     max_steps: int,
     *,
     hints_enabled: bool = False,
+    model: str = "claude-sonnet-4-5",
 ) -> tuple[str, float | None]:
     """Run an agent against a scenario.
 
     Returns:
         (scenario_id, reward)  — reward is None on error.
     """
-    logger.info(f"Running scenario: {scenario_id} (max_steps={max_steps}, hints={hints_enabled})")
+    logger.info(f"Running scenario: {scenario_id} (max_steps={max_steps}, hints={hints_enabled}, model={model})")
 
     env = Environment("coding")
     env.connect_image(image)
@@ -242,7 +252,7 @@ async def run_scenario(
     try:
         task = env(scenario_id, hints_enabled=hints_enabled)
         async with hud.eval(task, trace=True) as ctx:
-            agent = ClaudeAgent.create(model="claude-sonnet-4-5")
+            agent = _create_agent(model)
             await agent.run(ctx, max_steps=max_steps)
         reward = ctx.reward
     except Exception as exc:
@@ -258,13 +268,14 @@ async def run_all(
     max_steps: int,
     *,
     hints_enabled: bool = False,
+    model: str = "claude-sonnet-4-5",
 ) -> tuple[list[tuple[str, float]], list[tuple[str, float | None]]]:
     """Run all scenarios concurrently with an agent.
 
     Returns:
         (succeeded, failed)  — each entry is (scenario_id, reward).
     """
-    coros = [run_scenario(image, sid, max_steps, hints_enabled=hints_enabled) for sid in scenario_ids]
+    coros = [run_scenario(image, sid, max_steps, hints_enabled=hints_enabled, model=model) for sid in scenario_ids]
     results = await asyncio.gather(*coros, return_exceptions=True)
 
     succeeded: list[tuple[str, float]] = []
@@ -410,7 +421,7 @@ async def async_main(args: argparse.Namespace) -> int:
             f"(max_steps={args.max_steps}) ..."
         )
         succeeded, failed_runs = await run_all(
-            image, scenario_ids, args.max_steps, hints_enabled=hints_enabled,
+            image, scenario_ids, args.max_steps, hints_enabled=hints_enabled, model=args.model,
         )
 
         logger.info("")
@@ -511,6 +522,12 @@ def main(argv: Iterable[str] | None = None) -> int:
         type=int,
         default=20,
         help="Max agent steps for --run (default: 20)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="claude-sonnet-4-5",
+        help="Model to use for --run (e.g. gpt-4o, o3, claude-sonnet-4-5)",
     )
 
     args = parser.parse_args(list(argv) if argv is not None else None)

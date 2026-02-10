@@ -58,7 +58,7 @@ class GradingRunner:
     def grade(self) -> float:
         """
         Run grading and return score.
-        
+
         Returns:
             1.0 if tests pass, 0.0 otherwise
         """
@@ -78,18 +78,50 @@ class GradingRunner:
             capture_output=True,
         )
         if result.returncode != 0:
-            logger.warning(f"git apply --3way had issues: {result.stderr.decode()}")
-            # Fall back to force-applying what we can
-            subprocess.run(
+            logger.warning(f"git apply --3way failed (rc={result.returncode}): {result.stderr.decode()}")
+            # Fallback 1: git apply --reject (applies what it can, creates .rej for rest)
+            result2 = subprocess.run(
                 ["git", "apply", "--reject", "--whitespace=fix"],
                 cwd=self.working_dir,
                 input=patch_content,
                 capture_output=True,
             )
+            logger.info(f"git apply --reject rc={result2.returncode}")
+            if result2.returncode != 0:
+                logger.warning(f"git apply --reject stderr: {result2.stderr.decode()}")
+                # Check for .rej files to understand what failed
+                rej_result = subprocess.run(
+                    ["find", ".", "-name", "*.rej", "-type", "f"],
+                    cwd=self.working_dir,
+                    capture_output=True,
+                    text=True,
+                )
+                if rej_result.stdout.strip():
+                    logger.warning(f"Rejected patch hunks: {rej_result.stdout.strip()}")
+
+                # Fallback 2: use patch command which is more forgiving with fuzz
+                logger.info("Trying patch -p1 --force as final fallback")
+                result3 = subprocess.run(
+                    ["patch", "-p1", "--force", "--no-backup-if-mismatch"],
+                    cwd=self.working_dir,
+                    input=patch_content,
+                    capture_output=True,
+                )
+                logger.info(f"patch -p1 --force rc={result3.returncode}")
+                if result3.returncode != 0:
+                    logger.warning(f"patch fallback stderr: {result3.stderr.decode()}")
+                    logger.info(f"patch fallback stdout: {result3.stdout.decode()}")
 
         # Run tests
         success, metadata = self.run_tests()
-        
+
+        if not success:
+            logger.error(f"Tests FAILED for {self.problem_id}")
+            if metadata.get("stderr"):
+                logger.error(f"Test stderr (last 2000 chars): {metadata['stderr'][-2000:]}")
+            if metadata.get("stdout"):
+                logger.info(f"Test stdout (last 2000 chars): {metadata['stdout'][-2000:]}")
+
         return 1.0 if success else 0.0
 
     # =========================================================================
@@ -162,6 +194,26 @@ class CMakeGradingRunner(GradingRunner):
         if os.path.isdir(build_dir):
             shutil.rmtree(build_dir)
             logger.info(f"Removed stale build directory: {build_dir}")
+
+        # Verify test infrastructure files exist before building
+        test_cmake = os.path.join(cmake_dir, "cmake", "test.cmake")
+        test_cpp = os.path.join(cmake_dir, "tests", "LLMEvalTests.cpp")
+        cmakelists = os.path.join(cmake_dir, "CMakeLists.txt")
+        for fpath, label in [(test_cmake, "test.cmake"), (test_cpp, "LLMEvalTests.cpp")]:
+            if os.path.exists(fpath):
+                logger.info(f"Test file present: {label}")
+            else:
+                logger.error(f"Test file MISSING: {label} ({fpath})")
+
+        # Check that CMakeLists.txt includes the test cmake file
+        if os.path.exists(cmakelists):
+            with open(cmakelists) as f:
+                content = f.read()
+            if "test.cmake" in content:
+                logger.info("CMakeLists.txt includes test.cmake")
+            else:
+                logger.error("CMakeLists.txt does NOT include test.cmake — test target will be missing")
+
         cmd = (
             f"cd {cmake_dir} && "
             f"mkdir -p build && cd build && "
