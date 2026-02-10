@@ -19,21 +19,19 @@ async def thread_result_aggregation(hints_enabled: bool = False, validate_mode: 
         validate_mode=validate_mode,
     )
 
-    prompt = make_prompt("""The LLMEvalTests test suite is failing.
+    prompt = make_prompt("""There is a bug in AudioProcessor::filterChunks() in
+MediaProcessor/src/AudioProcessor.cpp.
 
-The test verifies that AudioProcessor::filterChunks() correctly
-aggregates results from parallel thread execution. When audio chunks
-are processed in parallel via a ThreadPool, the method must detect
-if ANY chunk fails — not just the last one.
+The filterChunks() method processes audio chunks in parallel via a ThreadPool.
+Each thread returns a bool indicating success or failure. After all threads
+complete, the results must be aggregated such that if ANY chunk fails, the
+overall result should be false.
 
-Run the failing test to see the error, find the bug in the source
-code, and fix it.
+However, there is a bug in how the results are combined — the current code
+silently discards earlier thread failures. Find and fix this bug.
 
-To build and run the test:
-  cd MediaProcessor/build
-  cmake .. -DBUILD_TESTING=ON
-  cmake --build . --target LLMEvalTests
-  ./LLMEvalTests
+IMPORTANT: Only modify MediaProcessor/src/AudioProcessor.cpp. Do not modify
+any cmake files or test files.
 """)
 
     _ = yield prompt

@@ -66,14 +66,25 @@ class GradingRunner:
         logger.info(f"Copying repo to {self.working_dir}")
         subprocess.run(["cp", "-rT", self.repo_path, self.working_dir], check=True)
 
-        # Apply test patch (adds test files)
+        # Apply test patch (adds test files). Use --3way to handle cases
+        # where the agent modified the same files the patch touches.
         logger.info(f"Applying test patch: {self.test_patch}")
         with open(self.test_patch) as f:
+            patch_content = f.read().encode()
+        result = subprocess.run(
+            ["git", "apply", "--3way"],
+            cwd=self.working_dir,
+            input=patch_content,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            logger.warning(f"git apply --3way had issues: {result.stderr.decode()}")
+            # Fall back to force-applying what we can
             subprocess.run(
-                ["git", "apply"],
+                ["git", "apply", "--reject", "--whitespace=fix"],
                 cwd=self.working_dir,
-                input=f.read().encode(),
-                check=True,
+                input=patch_content,
+                capture_output=True,
             )
 
         # Run tests
@@ -142,7 +153,15 @@ class CMakeGradingRunner(GradingRunner):
 
     def run_tests(self) -> tuple[bool, dict]:
         """Build with CMake and run the GTest binary."""
+        import shutil
+
         cmake_dir = os.path.join(self.working_dir, self.cmake_subdir)
+        # Remove any pre-existing build directory to avoid stale cmake cache
+        # paths from the Docker image. FetchContent will re-fetch deps.
+        build_dir = os.path.join(cmake_dir, "build")
+        if os.path.isdir(build_dir):
+            shutil.rmtree(build_dir)
+            logger.info(f"Removed stale build directory: {build_dir}")
         cmd = (
             f"cd {cmake_dir} && "
             f"mkdir -p build && cd build && "
