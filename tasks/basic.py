@@ -4,71 +4,48 @@ Each task is a scenario that handles its own setup and grading.
 """
 
 from env import env, setup_task, make_prompt
-from grading import AgentPatchGrader, Grade, ValidateMode
+from grading import CMakePatchGrader, Grade, ValidateMode
 
 
-@env.scenario("sample-json-bug")
-async def sample_json_bug(hints_enabled: bool = False, validate_mode: ValidateMode | None = None):
-    """Fix the JSON serialization bug in server.py."""
-    
+@env.scenario("thread-result-aggregation")
+async def thread_result_aggregation(hints_enabled: bool = False, validate_mode: ValidateMode | None = None):
+    """Fix the thread result aggregation bug in AudioProcessor::filterChunks()."""
+
     setup_task(
-        task_id="sample_json_bug",
-        base="server_fix_baseline",
-        test="server_fix_test",
-        golden="server_fix_golden",
+        task_id="thread_result_aggregation",
+        base="baseline",
+        test="test",
+        golden="golden",
         validate_mode=validate_mode,
     )
-    
-    prompt = make_prompt("""Fix the JSON serialization bug in server.py.
 
-The API server's responses are malformed. When you make a request to any endpoint,
-the response body is not valid JSON - it looks like a Python dict representation
-instead of proper JSON (e.g., single quotes instead of double quotes).
+    prompt = make_prompt("""The LLMEvalTests test suite is failing.
+
+The test verifies that AudioProcessor::filterChunks() correctly
+aggregates results from parallel thread execution. When audio chunks
+are processed in parallel via a ThreadPool, the method must detect
+if ANY chunk fails — not just the last one.
+
+Run the failing test to see the error, find the bug in the source
+code, and fix it.
+
+To build and run the test:
+  cd MediaProcessor/build
+  cmake .. -DBUILD_TESTING=ON
+  cmake --build . --target LLMEvalTests
+  ./LLMEvalTests
 """)
-    
+
     _ = yield prompt
-    
-    # Grade using AgentPatchGrader
+
     grade = Grade.from_subscores([
-        AgentPatchGrader.grade(
+        CMakePatchGrader.grade(
             weight=1.0,
-            problem_id="sample_json_bug",
-            test_files=["test_server.py"],
+            problem_id="thread_result_aggregation",
+            build_target="LLMEvalTests",
+            cmake_subdir="MediaProcessor",
             validate_mode=validate_mode,
-            # Uses default pytest command
         )
     ])
-    
+
     yield grade.score
-
-
-# ==============================================================================
-# TEMPLATE: Add your tasks below
-# ==============================================================================
-#
-# @env.scenario("my-task")
-# async def my_task(hints_enabled: bool = False, validate_mode: ValidateMode | None = None):
-#     """Task description."""
-#     
-#     setup_task(
-#         task_id="my_task",
-#         base="my_task_baseline",
-#         test="my_task_test",
-#         golden="my_task_golden",
-#         validate_mode=validate_mode,
-#     )
-#     
-#     prompt = make_prompt("Fix the bug in foo.py...")
-#     _ = yield prompt
-#     
-#     grade = Grade.from_subscores([
-#         AgentPatchGrader.grade(
-#             weight=1.0,
-#             problem_id="my_task",
-#             test_files=["test_foo.py"],
-#             validate_mode=validate_mode,
-#             # For custom test frameworks:
-#             # test_command="yarn test {test_files}",
-#         )
-#     ])
-#     yield grade.score

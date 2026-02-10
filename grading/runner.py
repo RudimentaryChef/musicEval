@@ -107,3 +107,60 @@ class GradingRunner:
             "stdout": result.stdout,
             "stderr": result.stderr,
         }
+
+
+class CMakeGradingRunner(GradingRunner):
+    """
+    Grading runner for CMake/GTest C++ projects.
+
+    Builds the specified target with CMake and runs the test binary.
+
+    Usage:
+        runner = CMakeGradingRunner(
+            problem_id="my_task",
+            build_target="LLMEvalTests",
+            cmake_subdir="MediaProcessor",
+        )
+        score = runner.grade()
+    """
+
+    def __init__(
+        self,
+        problem_id: str,
+        build_target: str = "LLMEvalTests",
+        cmake_subdir: str = "MediaProcessor",
+        patches_dir: str = "/home/root/patches",
+        repo_path: str | None = None,
+    ):
+        super().__init__(
+            problem_id=problem_id,
+            patches_dir=patches_dir,
+            repo_path=repo_path,
+        )
+        self.build_target = build_target
+        self.cmake_subdir = cmake_subdir
+
+    def run_tests(self) -> tuple[bool, dict]:
+        """Build with CMake and run the GTest binary."""
+        cmake_dir = os.path.join(self.working_dir, self.cmake_subdir)
+        cmd = (
+            f"cd {cmake_dir} && "
+            f"mkdir -p build && cd build && "
+            f"cmake .. -DBUILD_TESTING=ON 2>&1 && "
+            f"cmake --build . --target {self.build_target} 2>&1 && "
+            f"./{self.build_target}"
+        )
+        logger.info(f"Running: {cmd}")
+
+        result = subprocess.run(
+            ["bash", "-lc", cmd],
+            cwd=self.working_dir,
+            capture_output=True,
+            text=True,
+        )
+
+        return result.returncode == 0, {
+            "exit_code": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+        }

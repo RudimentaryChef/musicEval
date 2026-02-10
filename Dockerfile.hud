@@ -55,8 +55,8 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | b
 #
 # For private repos, add: --secret id=CODING_GITHUB_TOKEN,env=CODING_GITHUB_TOKEN
 
-ARG REPO_URL="https://github.com/hud-evals/coding-template-sample"
-ARG FOLDER_NAME="project"
+ARG REPO_URL="https://github.com/RudimentaryChef/MusicRemover.git"
+ARG FOLDER_NAME="MusicRemover"
 
 ENV FOLDER_NAME=${FOLDER_NAME}
 ENV REPO_URL=${REPO_URL}
@@ -85,63 +85,31 @@ RUN mkdir -p /home/root/patches && \
     git config --global --add safe.directory /home/ubuntu/${FOLDER_NAME}
 USER ubuntu
 
-# 1) Install language runtime/compiler
-# === FOR NODE.JS/TYPESCRIPT (example) ===
-# RUN NODE_VERSION_SPEC=$(jq -r '.engines.node // ""' /home/ubuntu/${FOLDER_NAME}/package.json) && \
-#     NODE_VERSION=$(printf "%s" "$NODE_VERSION_SPEC" | grep -oE '<= *[0-9]+' | tail -n1 | sed -E 's/^[^0-9]*//') && \
-#     if [ -z "$NODE_VERSION" ]; then NODE_VERSION=$(printf "%s" "$NODE_VERSION_SPEC" | grep -oE '[0-9]+' | tail -n1); fi && \
-#     bash -c "source ~/.nvm/nvm.sh --no-use && nvm install $NODE_VERSION && nvm use $NODE_VERSION && nvm alias default $NODE_VERSION" && \
-#     echo "source ~/.nvm/nvm.sh" >> /home/ubuntu/.bash_profile
-# SHELL ["/bin/bash", "--login", "-c"]
-#
-# === FOR PYTHON ===
-# RUN python3 -m pip install --upgrade pip
-#
-# === FOR JAVA ===
-# RUN apt-get install -y openjdk-[version]-jdk maven
-#
-# === FOR C++ ===
-# Already installed: gcc, g++, cmake via build-essential
-#
-# === FOR RUST ===
-# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# 1) Install C++ build dependencies (cmake, libsndfile, googletest)
+USER root
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends \
+  cmake \
+  pkg-config \
+  libsndfile1-dev \
+  libgtest-dev \
+  && rm -rf /var/lib/apt/lists/*
 
-# 2) Install build tool / package manager
-# === FOR NODE.JS ===
-# RUN YARN_VERSION=[version] && \
-#     YARN_MAJOR=$(echo $YARN_VERSION | cut -d. -f1) && \
-#     bash -lc "if [ \"$YARN_MAJOR\" -ge 2 ]; then \
-#         corepack enable && corepack prepare yarn@$YARN_VERSION --activate; \
-#     else \
-#         npm install -g yarn@$YARN_VERSION; \
-#     fi"
-#
-# === FOR PYTHON ===
-# RUN pip install poetry  # or: pipenv, pip-tools
-#
-# === FOR JAVA ===
-# Already installed: maven or gradle
-#
-# === FOR RUST ===
-# Already installed with rustup
+# Build and install GoogleTest system-wide so cmake find_package works
+# without FetchContent (no internet at grading time)
+RUN cd /usr/src/googletest \
+  && cmake . \
+  && make \
+  && make install
 
-# 3) Install dependencies
-# RUN cd /home/ubuntu/${FOLDER_NAME} && [INSTALL_DEPENDENCIES_COMMAND]
-# Examples:
-#   Node.js: yarn install
-#   Python: pip install -r requirements.txt  or  poetry install
-#   Java: mvn dependency:resolve
-#   Rust: cargo fetch
-#   C++: (usually handled by build system)
+USER ubuntu
 
-# 4) Build the project (optional)
-# RUN cd /home/ubuntu/${FOLDER_NAME} && [BUILD_COMMAND]
-# Examples:
-#   Node.js: yarn build  or  npm run build
-#   Python: (often no build step)  or  python setup.py build
-#   Java: mvn package -DskipTests
-#   Rust: cargo build --release
-#   C++: mkdir build && cd build && cmake .. && make
+# 2) Pre-build the MediaProcessor so the agent starts with a compiling baseline
+RUN cd /home/ubuntu/${FOLDER_NAME}/MediaProcessor \
+  && mkdir -p build \
+  && cd build \
+  && cmake .. \
+  && make
 
 # 6) Configure environment files
 # Copy and customize your environment configuration

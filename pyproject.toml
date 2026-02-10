@@ -1,7 +1,7 @@
 [project]
-name = "coding-env"
+name = "music-remover-env"
 version = "0.1.0"
-description = "Coding environment with bash, editor, and VNC tools for solving programming tasks"
+description = "RL evaluation environment for Fast Music Remover bug fixing"
 requires-python = ">=3.11"
 dependencies = [ "hud-python[agents]>=0.5.17", "click>=8.0.0", "mcp[cli]>=1.10.1", "numpy>=1.26.0", "packaging>=21.0", "pillow", "pydantic>=2.11.4",]
 
@@ -20,7 +20,7 @@ target-version = "py311"
 line-length = 120
 
 [tool.hud]
-image = "coding-template:dev"
+image = "music-remover-env:dev"
 
 [tool.ruff.lint]
 select = [ "E", "F", "B", "I", "C4", "UP",]
