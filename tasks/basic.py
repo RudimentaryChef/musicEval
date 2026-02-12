@@ -87,3 +87,40 @@ Do not modify any build files or tests. You are not given access to the real tes
       ])
 
       yield grade.score
+@env.scenario("thread-result-aggregation-v3")
+async def thread_result_aggregation_v3(hints_enabled: bool = False, validate_mode: ValidateMode | None = None):
+      """Fix the thread result aggregation bug (variant 3)."""
+
+      setup_task(
+          task_id="thread_result_aggregation_v3",
+          base="baseline",          # git branch names in your MusicRemover repo
+          test="test",
+          golden="golden",
+          validate_mode=validate_mode,
+      )
+
+      prompt = make_prompt("""There is a bug somewhere in the MediaProcessor pipeline.
+
+Symptom:
+A reliability regression was introduced. A test that used to pass now fails intermittently.
+
+Your task:
+Find the root cause and fix it.
+
+Constraints:
+Do not modify any build files or tests. You are not given access to the real tests. You may create local tests for yourself but do not commit them. 
+    """)
+
+      _ = yield prompt
+
+      grade = Grade.from_subscores([
+          CMakePatchGrader.grade(
+              weight=1.0,
+              problem_id="thread_result_aggregation_v3",
+              build_target="LLMEvalTests",
+              cmake_subdir="MediaProcessor",
+              validate_mode=validate_mode,
+          )
+      ])
+
+      yield grade.score
